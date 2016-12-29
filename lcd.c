@@ -14,13 +14,13 @@ void writeDisplay(uint8_t data) {
 	PORTD &= ~(LCD_RW);
 	PORTD &= ~(LCD_E);
 	//send MS 4 bits
-	PORTB &= 0xE2;
-	PORTB |= (((data >> 4) & 0x01) | ((data >> 3) & 0x1C)) & 0x1D;
+	PORTB &= 0xF0;
+	PORTB |= (data >> 4) & 0x0F;
 	//confirm
 	pulse_e();
 	//send LS 4 bits;
-	PORTB &= 0xE2;
-	PORTB |= (((data) & 0x01) | ((data << 1) & 0x1C)) & 0x1D;
+	PORTB &= 0xF0;
+	PORTB |= data & 0x0F;
 	//confirm
 	pulse_e();
 	_delay_ms(WRITE_DELAY); //delay is very large
@@ -44,12 +44,12 @@ void sendStr(char* str) {
 }
 
 void lcdInit() {
-	DDRB |= 1 << 4 | 1 << 3 | 1 << 2 | 1 << 0;
-	DDRD |= 1 << 7 | 1 << 6 | 1 << 5;
+	DDRB |= 1 << 3 | 1 << 2 | 1 << 1 | 1 << 0;
+	DDRD |= 1 << 7 | 1 << 5 | 1 << 4;
 	
 	//enable 4 pin mode
-	PORTB &= 0xE2;
-	PORTB |= 0x4;
+	PORTB &= 0xF0;
+	PORTB |= 0x2;
 	pulse_e();
 	_delay_ms(50);
 	

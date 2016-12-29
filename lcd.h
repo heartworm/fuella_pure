@@ -7,8 +7,8 @@
 #include <string.h>      // delay functions
 
 
-#define LCD_RS 1 << 5
-#define LCD_RW 1 << 6
+#define LCD_RS 1 << 4
+#define LCD_RW 1 << 5
 #define LCD_E 1 << 7
 
 #define WRITE_DELAY 4

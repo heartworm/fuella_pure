@@ -11,40 +11,43 @@
 #include "lcd.h"
 
 uint8_t pulseReady = 1;
-int pulses =0;
-void startADC();
+uint8_t pulseLen = 128;
+int pulses = 0;
+void initADC();
 void initPulser();
+void initUART();
 void pulse(int len);
+void recv();
 
 int main()
 {
-	sei();
-    DDRB |= 1 << 5;
-	startADC();
+	DDRB |= 1 << 5;
+	initADC();
 	initPulser();
+	initUART();
 	lcdInit();
 	lcdDefaults();
 	
     while (1) {
-		int plen = round((ADC/1023.0)*65535.0);
-		if (!(PIND & 1)) pulse(plen);
-		lcdClear();
+		if (pulses) PORTB |= 1 << 5;
+		else PORTB &= ~(1 << 5);
+		recv();
+/* 		lcdClear();
 		char outStr[16];
-		sprintf(outStr, "%u", pulses);
+		sprintf(outStr, "%u", pulseLen);
 		lcdPutString(0, 0, "fuck the dog!");
 		lcdPutString(0, 1, outStr);
-		sprintf(outStr, "%u", (PIND & 1));
+		sprintf(outStr, "%u", pulses);
 		lcdPutString(4, 1, outStr);
-		sprintf(outStr, "%u", plen);
-		lcdPutString(6, 1, outStr);
-		lcdDraw();
-		_delay_ms(1000);
+		lcdDraw(); */
+		if (!(PIND & (1 << 0))) pulse(pulseLen);
+		_delay_ms(100);
 		
     }
 	return 0;
 }
 
-void startADC() {
+void initADC() {
 	ADMUX |= (1 << REFS0); //Use Vcc as Reference
 							//ADC0 is used as pin by default					
 							//free running mode by defult
@@ -53,25 +56,46 @@ void startADC() {
 	ADCSRA |= (1 << ADEN) | (1 << ADSC) | (1 << ADATE); //Enable ADC, start conversion, and enable autotriggering
 }
 
+void initUART() {
+	//set baud rate to 38400
+	UBRR0 = 25;
+	//enable RX, tx unnecessary
+	UCSR0B |= _BV(RXEN0);
+	//frame format, 8 data, with stop bit and no parity - default settings
+}
+
 void initPulser() {
-	ICR1 = 0xFFFF; //set top to max
-	TIMSK1 |= 1 << 1; //compare match interrupt
- 	TCCR1A |= 1 << COM1A1 | 1 << WGM11; // Fast PWM non-inverting pin A, TOP at ICR1
-	TCCR1B |= 1 << WGM13 | 1 << WGM12; //extended WGM bits
-	DDRB |= 1 << 1;
+	TIMSK0 |= _BV(OCIE0A); //compare match interrupt
+ 	TCCR0A |= _BV(COM0A1) | _BV(WGM01) | _BV(WGM00); // Fast PWM non-inverting pin 0C0A, TOP at 0xFF
+	DDRD |= 1 << 6; //output (OC0A) is on PD6 
+	sei();
 }
 
 void pulse(int len) {
 	if (!pulseReady) {return;}
 	pulseReady = 0;
 	pulses++;
-	OCR1A = len;
-	TCNT1 = 0xFFFF;
-	TCCR1B |= 1 << CS11 | 1 << CS10; //clock at clk/64
+	OCR0A = len;
+	TCNT0 = 0xFF;
+	TCCR0B |= _BV(CS02) | _BV(CS00); //clock at clk/64
 	
 }
 
-ISR (TIMER1_COMPA_vect) {
-	TCCR1B &= ~(1 << CS11 | 1 << CS10); //insta stop timer
+ISR (TIMER0_COMPA_vect) {
+	TCCR0B &= ~(_BV(CS02) | _BV(CS10)); //insta stop timer
+	pulses--;
 	pulseReady = 1;
+}
+
+void recv() {
+	if (UCSR0A & _BV(RXC0)) {
+		uint8_t in = 0; //Recv'd byte
+		uint8_t isValid = 0;
+		while (UCSR0A & _BV(RXC0)) {
+			isValid = !(UCSR0A & (_BV(FE0) | _BV(DOR0) | _BV(UPE0))); //no framing, overrun or parity errors
+			in = UDR0; //clear the way for the buffer's next byte
+		}
+		
+		if (isValid) pulseLen = in;
+	}
 }
