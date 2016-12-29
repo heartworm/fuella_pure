@@ -9,10 +9,18 @@
 #include <math.h>         // C header for the bool type
 
 #include "lcd.h"
+#include "injector.h"
 
-uint8_t pulseReady = 1;
-uint8_t pulseLen = 128;
-int pulses = 0;
+#define SENSOR_ATDC 0 		// rising/falling edge of sensor, when occurs, what angle are we at?
+
+
+int rotInt = 0; // interval between rotations
+int dRotInt = 0; // derivative of interval
+int predRotInt = 0; // predicted interval (based on derivative)
+uint8_t powerStroke = 0; //is the next TDC event before a power stroke or intake stroke?
+
+
+uint8_t pulseLen = 128; //basically a UART receive buffer for now
 void initADC();
 void initPulser();
 void initUART();
@@ -29,8 +37,6 @@ int main()
 	lcdDefaults();
 	
     while (1) {
-		if (pulses) PORTB |= 1 << 5;
-		else PORTB &= ~(1 << 5);
 		recv();
 /* 		lcdClear();
 		char outStr[16];
@@ -64,26 +70,9 @@ void initUART() {
 	//frame format, 8 data, with stop bit and no parity - default settings
 }
 
-void initPulser() {
-	TIMSK0 |= _BV(OCIE0A); //compare match interrupt
- 	TCCR0A |= _BV(COM0A1) | _BV(WGM01) | _BV(WGM00); // Fast PWM non-inverting pin 0C0A, TOP at 0xFF
-	DDRD |= 1 << 6; //output (OC0A) is on PD6 
-	sei();
-}
-
-void pulse(int len) {
-	if (!pulseReady) {return;}
-	pulseReady = 0;
-	pulses++;
-	OCR0A = len;
-	TCNT0 = 0xFF;
-	TCCR0B |= _BV(CS02) | _BV(CS00); //clock at clk/64
-	
-}
 
 ISR (TIMER0_COMPA_vect) {
 	TCCR0B &= ~(_BV(CS02) | _BV(CS10)); //insta stop timer
-	pulses--;
 	pulseReady = 1;
 }
 
@@ -95,7 +84,6 @@ void recv() {
 			isValid = !(UCSR0A & (_BV(FE0) | _BV(DOR0) | _BV(UPE0))); //no framing, overrun or parity errors
 			in = UDR0; //clear the way for the buffer's next byte
 		}
-		
 		if (isValid) pulseLen = in;
 	}
 }
