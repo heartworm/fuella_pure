@@ -7,7 +7,9 @@ AVRDUDE=avrdude -c arduino -p ATMEGA328P -P COM3 -U flash:w:
 all: 
 	$(GCC) $(FLAGS) -c -o main.o main.c
 	$(GCC) $(FLAGS) -c -o lcd.o lcd.c
-	$(GCC) main.o lcd.o -o main
+	$(GCC) $(FLAGS) -c -o injector.o injector.c
+	$(GCC) $(FLAGS) -c -o uart.o uart.c
+	$(GCC) main.o lcd.o injector.o uart.o -o main
 	$(OBJCOPY) main main.hex
 
 flash: 
