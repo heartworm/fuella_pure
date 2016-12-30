@@ -10,6 +10,7 @@
 
 #include "lcd.h"
 #include "injector.h"
+#include "serial.h"
 
 #define SENSOR_ATDC 48.909426987061 // rising/falling edge of sensor, when occurs, what angle are we at?
 
@@ -37,19 +38,15 @@ int main()
 	// initADC();
 	initPulser();
 	initEngineTimer();
-	initUART();
-	lcdInit();
-	lcdDefaults();
+	initSerial();
+	//lcdInit();
+	//lcdDefaults();
 	
 	
 	
 	sei(); //turn on interrupts
     while (1) {
-		// recv();
-		if (!(PIND & (1 << 0))) {
-			pulse(pulseLen);
-			_delay_ms(100);
-		}
+		recv(&processFrame);
 		
 		/* if (pulseLen == 0x33) {
 			PORTB |= _BV(5);
@@ -57,7 +54,7 @@ int main()
 			PORTB &= ~_BV(5);
 		} */
 		
-		else {
+/* 		else {
 			lcdClear();
 				char outStr[16];
 				lcdPutString(0, 0, "Run:");
@@ -79,7 +76,7 @@ int main()
 				lcdPutString(7, 1, outStr);
 			lcdDraw();
 			_delay_ms(250);
-		}
+		} */
 		
 		/* if (engineTiming) {
 			if (!injected && (getEngineAngle() >= 450.0)) { //90deg after exhaust stroke ends
@@ -145,17 +142,10 @@ ISR(TIMER1_OVF_vect) {
 	predRotInt = 0;
 }
 
-ISR(USART_RX_vect) {
-	recv();
-}
-
 void processFrame() {
-	uint8_t len = 0;
-	while (!bufferEmpty()) {
-		instBuf[len++] = bufferNext();
-	}
-	if (instBuf[0] == HDR_FUEL){
-			if (len != 2) return;
-			pulseLen = instBuf[1];
+	if (rxBuf[0] == HDR_FUEL) {
+			if (rxNew != 2) return;
+			pulseLen = rxBuf[1];
+			pulse(pulseLen);
 	}
 }

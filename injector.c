@@ -24,5 +24,6 @@ uint8_t isPulseReady() {
 //
 ISR (TIMER0_COMPA_vect) {
 	TCCR0B &= ~(_BV(CS02) | _BV(CS10)); //insta stop timer
+	PORTD &= ~_BV(6); //just in case we missed the timer restart
 	pulseReady = 1;
 }
