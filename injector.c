@@ -14,7 +14,6 @@ void pulse(int len) {
 	OCR0A = len;
 	TCNT0 = 0xFF;
 	TCCR0B |= _BV(CS02) | _BV(CS00); //clock at clk/64
-	
 }
 
 uint8_t isPulseReady() {

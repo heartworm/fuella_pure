@@ -62,3 +62,25 @@ void bufferTrash() {
 	inEsc = 0;
 	inFrame = 0;
 }
+
+void escapeAndSend(uint8_t *data, uint8_t len) {	
+	uint8_t outData[(len * 2) + 2];
+	int pos = 0;
+	int i;
+	outData[pos++] = FLG_STX;
+	for (i = 0; i < len; i++) {
+		if (data[i] == FLG_ESC || data[i] == FLG_STX || data[i] == FLG_ETX) {
+			outData[pos++] = FLG_ESC;
+		}
+		outData[pos++] = data[i];
+	}
+	outData[pos++] = FLG_ETX;
+	for (i = 0; i < pos; i++) {
+		uart_putc(outData[i]);
+	}
+}
+
+void sendEngineStatus(uint8_t pulseLen, bool engineRunning, bool revLimit, uint16_t rotInt) {
+	uint8_t data[] = {HDR_GETDATA, pulseLen, (uint8_t) engineRunning, (uint8_t) revLimit, rotInt >> 8, rotInt & 0x00FF};
+	escapeAndSend(data, 6);
+}

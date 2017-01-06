@@ -13,6 +13,7 @@
 #include <avr/io.h>          // register definitions
 #include "uart.h"       
 #include <util/delay.h>      // delay functions
+#include <stdbool.h>    
 
 uint8_t rxNew;
 uint8_t inFrame;
@@ -31,6 +32,8 @@ uint8_t bufferNext();
 void bufferPush(uint8_t in);
 
 void bufferTrash();
+void escapeAndSend(uint8_t *data, uint8_t len);
+void sendEngineStatus(uint8_t pulseLen, bool engineRunning, bool revLimit, uint16_t rotInt);
 
 
 #endif

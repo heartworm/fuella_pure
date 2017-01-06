@@ -18,13 +18,16 @@ uint8_t instBuf[RX_BUFLEN];
 
 uint16_t rotInt = 0; // interval between rotations
 int16_t dRotInt = 0; // derivative of interval
-uint16_t predRotInt = 0; // predicted interval (based on derivative)
-uint8_t engineRunning = 0; //is engine currently running, enabled on first hall sensor and disabled on overflow of timer
-uint8_t engineTiming = 0;
-uint8_t powerStroke = 0; //is the next TDC event before a power stroke or intake stroke? (if true probs fire spark)
-uint8_t injected = 0;
+uint16_t predRotInt = false; // predicted interval (based on derivative)
+
+bool engineRunning = false; //is engine currently running, enabled on first hall sensor and disabled on overflow of timer
+bool engineTiming = false;
+bool powerStroke = false; //is the next TDC event before a power stroke or intake stroke? (if true probs fire spark)
+bool injected = false;
+bool revLimit = false;
 
 uint8_t pulseLen = 128; //basically a UART receive buffer for now
+
 // void initADC();
 void initEngineTimer();
 void processFrame();
@@ -46,8 +49,6 @@ int main()
 	
 	sei(); //turn on interrupts
     while (1) {
-		recv(&processFrame);
-		
 		/* if (pulseLen == 0x33) {
 			PORTB |= _BV(5);
 		} else {
@@ -78,12 +79,21 @@ int main()
 			_delay_ms(250);
 		} */
 		
-		/* if (engineTiming) {
+		
+		if (engineTiming) {
+			
+			//hysteresis, stop a weird oscillating condition
+			//3000 rpm rev limiter
+			if (predRotInt <= 1250) revLimit = true;
+			else if (predRotInt <= 1500) revLimit = false;
+			
 			if (!injected && (getEngineAngle() >= 450.0)) { //90deg after exhaust stroke ends
-				pulse(pulseLen);
-				injected = 1;
+				
+				if (!revLimit) pulse(pulseLen); 
+				injected = true; 
 			}
-		}	 */	
+		}
+		recv(&processFrame);
     }
 	return 0;
 }
@@ -114,8 +124,8 @@ void initEngineTimer() {
 
 float getEngineAngle() { //engine angle from 0 - 720. 0 is TDC when spark should fire
 	float angle = (TCNT1 / ((float) predRotInt)) * 360.0;
-	angle += SENSOR_ATDC;
 	if (!powerStroke) angle += 360.0;
+	angle += SENSOR_ATDC;
 	angle = fmod(angle, 720.0);
 	return angle;
 }
@@ -126,26 +136,35 @@ ISR(INT0_vect) { //INT0 rising edge interrupt
 		if (engineTiming) dRotInt = rotInt - newInt; //if the engine hasn't just started running
 		rotInt = newInt;
 		predRotInt = rotInt + dRotInt;
-		engineTiming = 1;
+		engineTiming = true;
 	}
 	TCNT1 = 0; //reset engine timer
-	engineRunning = 1; //the engine is running
-	if (powerStroke) injected = 0;
+	engineRunning = true; //the engine is running
+	if (powerStroke) injected = false;
 	powerStroke = !powerStroke; //invert whether the next tdc is a power stroke or not
 }
 
 ISR(TIMER1_OVF_vect) {
-	engineRunning = 0; //if the sensor hasn't triggered by now (~1second) the engine has stopped
-	engineTiming = 0;
+	engineRunning = false; //if the sensor hasn't triggered by now (~1second) the engine has stopped
+	engineTiming = false;
 	rotInt = 0;
 	dRotInt = 0;
 	predRotInt = 0;
 }
 
 void processFrame() {
-	if (rxBuf[0] == HDR_FUEL) {
+	switch (rxBuf[0]) {
+		case HDR_FUEL:
 			if (rxNew != 2) return;
 			pulseLen = rxBuf[1];
+			break;
+		case HDR_GETDATA:
+			if (rxNew != 1)  return;
+			sendEngineStatus(pulseLen, engineRunning, revLimit, rotInt);
+			break;
+		case HDR_PULSE:
+			if (rxNew != 1) return;
 			pulse(pulseLen);
+			break;
 	}
 }
