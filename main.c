@@ -49,6 +49,8 @@ int main()
 	
 	sei(); //turn on interrupts
     while (1) {
+		
+		
 		/* if (pulseLen == 0x33) {
 			PORTB |= _BV(5);
 		} else {
@@ -84,12 +86,11 @@ int main()
 			
 			//hysteresis, stop a weird oscillating condition
 			//3000 rpm rev limiter
-			if (predRotInt <= 1250) revLimit = true;
-			else if (predRotInt <= 1500) revLimit = false;
+			/* if (predRotInt <= 1000) revLimit = true;
+			else if (predRotInt >= 1500) revLimit = false; */
 			
 			if (!injected && (getEngineAngle() >= 450.0)) { //90deg after exhaust stroke ends
-				
-				if (!revLimit) pulse(pulseLen); 
+				if ((pulseLen > 0) && !revLimit) pulse(pulseLen); 
 				injected = true; 
 			}
 		}
@@ -115,6 +116,8 @@ int main()
 	
 void initEngineTimer() {
 	DDRD &= ~(_BV(2)); //set interrupt pin to input
+	PORTD |= _BV(2); //enable pullup resistor on pin D2
+	
 	EICRA = _BV(ISC01) | _BV(ISC00); //interrupt on rising edge of INT0
 	EIMSK = _BV(INT0); //enable external interrupt on pin INT0
 		
@@ -123,7 +126,8 @@ void initEngineTimer() {
 }
 
 float getEngineAngle() { //engine angle from 0 - 720. 0 is TDC when spark should fire
-	float angle = (TCNT1 / ((float) predRotInt)) * 360.0;
+	float revs = (TCNT1 / ((float) predRotInt));
+	float angle = revs * 360.0;
 	if (!powerStroke) angle += 360.0;
 	angle += SENSOR_ATDC;
 	angle = fmod(angle, 720.0);
@@ -132,13 +136,13 @@ float getEngineAngle() { //engine angle from 0 - 720. 0 is TDC when spark should
 
 ISR(INT0_vect) { //INT0 rising edge interrupt
 	uint16_t newInt = TCNT1;
+	TCNT1 = 0;
 	if (engineRunning) {
 		if (engineTiming) dRotInt = rotInt - newInt; //if the engine hasn't just started running
 		rotInt = newInt;
 		predRotInt = rotInt + dRotInt;
 		engineTiming = true;
 	}
-	TCNT1 = 0; //reset engine timer
 	engineRunning = true; //the engine is running
 	if (powerStroke) injected = false;
 	powerStroke = !powerStroke; //invert whether the next tdc is a power stroke or not
@@ -147,6 +151,7 @@ ISR(INT0_vect) { //INT0 rising edge interrupt
 ISR(TIMER1_OVF_vect) {
 	engineRunning = false; //if the sensor hasn't triggered by now (~1second) the engine has stopped
 	engineTiming = false;
+	revLimit = false;
 	rotInt = 0;
 	dRotInt = 0;
 	predRotInt = 0;
@@ -160,11 +165,11 @@ void processFrame() {
 			break;
 		case HDR_GETDATA:
 			if (rxNew != 1)  return;
-			sendEngineStatus(pulseLen, engineRunning, revLimit, rotInt);
+			sendEngineStatus(pulseLen, engineTiming, (PIND && _BV(2)), rotInt);
 			break;
 		case HDR_PULSE:
 			if (rxNew != 1) return;
 			pulse(pulseLen);
-			break;
+			break;			
 	}
 }
